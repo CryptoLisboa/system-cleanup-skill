@@ -15,7 +15,15 @@ WAIT_SECS="${WAIT_SECS:-240}"
 
 log() { printf '\033[1m>>\033[0m %s\n' "$1"; }
 
-daemon_up() { docker info --format '{{.ServerVersion}}' >/dev/null 2>&1; }
+# `docker info` can exit 0 while the server half is broken (observed: backend
+# answers the socket but reports "Docker Desktop is unable to start"). Require a
+# real version string AND a server round-trip, not just exit status.
+daemon_up() {
+  local v
+  v=$(docker info --format '{{.ServerVersion}}' 2>/dev/null) || return 1
+  case "$v" in [0-9]*.[0-9]*) ;; *) return 1 ;; esac
+  docker system df >/dev/null 2>&1
+}
 
 # macOS has no coreutils `timeout`.
 with_timeout() {
@@ -36,7 +44,7 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 
 log "checking daemon (bounded — a dead daemon hangs the CLI forever)"
-if with_timeout 20 docker info --format '{{.ServerVersion}}' 2>/dev/null; then
+if with_timeout 30 daemon_up; then
   log "daemon already up. Nothing to do."
   with_timeout 25 docker system df
   exit 0

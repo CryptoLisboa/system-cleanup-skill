@@ -68,6 +68,45 @@ account's profiles with zero state loss. Never touch siblings like `Bookmarks`,
 Pattern: `ls -1 | sort -V | sed '$d'` — **not** `head -n -1`, which silently
 no-ops on macOS (gotchas.md).
 
+"Keep highest" is not enough for CLI version dirs: a long-running session can
+still hold an **older** version open. Check `lsof <dir>` per version and skip
+any with open handles, plus whatever the launcher symlink points at.
+
+## T0 — per-launch temp clones in `/private/var/folders`
+
+| Path | Seen | Note |
+|---|---|---|
+| `$(getconf DARWIN_USER_TEMP_DIR)/../X/com.google.Chrome.code_sign_clone/code_sign_clone.*` | 41 dirs, 85 G by `du`, 5.7 G by `df` | Chrome leaves one ~2 G clone of itself per launch/update and never cleans up. Delete the ones with no open handles (`lsof +D`). They regrow — re-check after Chrome restarts |
+| `…/X/<other-bundle-id>.code_sign_clone` | 1.2 G | same mechanism, other Chromium/Electron apps; leave the one a running app holds |
+| `$(getconf DARWIN_USER_TEMP_DIR)/node-compile-cache` | 0.5 G | auto |
+
+This tree is outside `$HOME`, so no home-dir scan finds it. It was the answer
+to "50 GB vanished in five days" on one machine. The clones are APFS clones of
+the app bundle, so `du` overstates wildly — report the `df` delta.
+
+## T0 — leftover installer staging in `~/.cache`
+
+| Path | Seen | Note |
+|---|---|---|
+| `~/.cache/codex-runtimes/codex-runtime-install-*` | 2.0 G | abandoned installer temp dirs, months old. Keep `codex-primary-runtime` (the live one) |
+| `~/.cache/puppeteer/chrome*/<older-version>` | 550 M | keep the newest; Puppeteer re-downloads a pinned older one on demand |
+
+Tell leftovers from live state by mtime and `lsof`, not by name.
+
+## T0 — stale `node_modules` (age-gated)
+
+A blanket `node_modules` sweep breaks whatever is running. Gate each one:
+
+1. No file in the project changed in N days (default 14), ignoring
+   `node_modules`, `.git` and build dirs.
+2. No live process has a path inside the project (`ps -axo command`).
+3. A lockfile exists — without one the reinstall can resolve different
+   versions, so skip it.
+
+Skip `node_modules` nested inside `.next` or other build output; those go with
+the build dir. Observed: 13 dirs, 6.6 G by `du`, 5.3 G by `df` (hardlinks).
+Then `pnpm store prune` — in that order.
+
 ## T0 — Xcode / simulators
 
 | Path | Seen | Note |
@@ -109,6 +148,8 @@ no-ops on macOS (gotchas.md).
 | `.dmg`/`.pkg` installers in Downloads | 1.7 G | re-downloadable, but Downloads is T2 ground — list them, let the user fire the delete |
 | `/usr/local/Homebrew` | 0.95 G | stale x86/Rosetta brew on ARM Macs. Verify dead first: no `/usr/local/Cellar`, no `/usr/local/bin/brew`, `brew config` points at `/opt/homebrew` |
 | `/usr/local/share/dotnet` | 3.6 G | only if every SDK is end-of-life (`ls` the versions) and no .NET work exists; sudo, so user runs it |
+| `~/Library/Application Support/Claude/vm_bundles/claudevm.bundle` | 10.4 G | Claude desktop's Cowork VM image. Re-downloads (~10.8 G) the next time Cowork is opened; free win only if the user doesn't use Cowork |
+| `~/.cache/solana` | 1.3 G | Solana platform-tools; re-download on next program build |
 | `~/Library/Developer/CoreSimulator/Devices` | 192 M | installed simulator state, app data |
 | `~/Library/Developer/Xcode/iOS DeviceSupport` | — | re-extracted per device on next attach |
 | `~/.rustup` | — | toolchain re-download |
@@ -130,6 +171,8 @@ no-ops on macOS (gotchas.md).
 | `~/Library/Application Support/com.apple.voicememos` | **personal audio recordings** — looks like fat app data (1.3 G seen), no cloud copy guaranteed |
 | `~/Library/Application Support/WhatsApp` | local message history |
 | `~/Library/Application Support/Dropbox` | sync state — deleting forces a full re-sync, frees nothing durable |
+| `~/.claude/projects`, `~/.claude/file-history` | session transcripts, agent memory and edit-undo history (3.5 G + 0.9 G seen) — history, not cache |
+| `~/.cursor/chats`, `~/.codex/sessions` | chat/session history of other coding agents (2.2 G + 0.8 G seen) |
 | `~/.nvm/versions` on an account someone still uses | working Node runtimes, not cache — breaks `node` until reinstalled. T1 on dormant accounts |
 
 ## Docker footprint

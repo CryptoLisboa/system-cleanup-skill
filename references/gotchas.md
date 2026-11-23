@@ -67,6 +67,36 @@ the size field and take the rest instead:
 run of spaces *and* tabs, so a path's internal spaces become field breaks.
 Forcing the FS to the real separator — `awk -F'\t' '{print $2}'` — also works.)
 
+## APFS clones: `du` can overstate by 15x
+
+41 Chrome `code_sign_clone` dirs measured 85 GB with `du`; deleting all of them
+moved `df` by 5.7 GB. They are copy-on-write clones of one app bundle, so each
+reports full size while sharing almost every block. Same family as the
+hardlink trap below, bigger ratio. Never promise the `du` number for anything
+under `/private/var/folders/*/*/X` — delete, then report the `df` delta.
+
+## Space that vanishes between cleanups lives outside `$HOME`
+
+When free space drops tens of GB in days and every home-dir total looks the
+same as last time, measure `/private/var/folders` before theorising. It holds
+per-user temp and cache dirs that no `$HOME` scan touches (87 GB seen there).
+
+## A pgrep-based wait loop matches its own shell
+
+```bash
+until ! pgrep -f 'docker image prune -a'; do sleep 3; done   # never ends
+```
+
+`pgrep -f` matches the wrapper shell whose command line contains the pattern,
+so the loop waits on itself. Wait on the PID instead:
+`until ! kill -0 "$pid" 2>/dev/null; do sleep 3; done`.
+
+## `docker info` can exit 0 on a broken daemon
+
+The backend can answer the socket while the engine is down, so exit status
+alone reads as "up". Require a real version string **and** a server round-trip
+(`docker system df`). `docker-revive.sh` does both.
+
 ## APFS reclaims lazily — an immediate `df` can read delta 0
 
 A verified multi-GB delete showed `DELTA_MB=0`, then the space appeared a
