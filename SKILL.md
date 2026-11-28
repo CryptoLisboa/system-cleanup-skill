@@ -140,7 +140,7 @@ kills its VM boot, the backend never retries, and **reopening the app does not
 fix it** — the stale backend still holds the socket and survives a normal quit.
 
 ```bash
-bash <path-to-this-skill>/scripts/docker-revive.sh   # restarts only; deletes nothing
+bash <path-to-this-skill>/scripts/docker-revive.sh   # hard restart: running containers stop; deletes nothing
 ```
 
 Once the daemon answers, prune in order of safety:
@@ -167,7 +167,7 @@ appears without extra work. Give it a moment before concluding it didn't.
 | `scripts/scan.sh` | Read-only measurement. Ranked table by size with tier labels, plus `df`. Safe with a dead Docker daemon. |
 | `scripts/reclaim.sh` | Tier-0 reclaims, grouped: `pm`, `browsers`, `sim`, `appcache`, `all` (those four), plus opt-in `langcache` and `builds`. Dry-run default; `--execute` to act. Hard-refuses Tier 1/2 paths. |
 | `scripts/reclaim.sh self-test` | Asserts every Tier-1/2 refusal actually fires (forced dry-run). Run it after editing the denylist or any guard — a guard that fails open still reads as protection. `purge-live.sh self-test` does the same for the sudo-territory script. |
-| `scripts/docker-revive.sh` | Fixes the stale-backend wedge (hard-kill + relaunch + poll). Restarts only; deletes nothing. |
+| `scripts/docker-revive.sh` | Fixes the stale-backend wedge (hard-kill + relaunch + poll). Hard restart, so running containers stop; deletes nothing. |
 | `scripts/scan-live.sh` | Live per-entry size scan: parallel `du` workers, prints each entry as measured, ranked table at the end. Sudo-safe for other accounts. Read-only. |
 | `scripts/purge-live.sh` | Parallel Tier-0 purge with per-item receipts + 3s heartbeat. Dry-run default, `--execute` to act, gates on running dev servers; `--home` adds package caches plus an **allowlisted** set of `Library/Caches` names — never the whole dir (Spotify offline music and Playwright browsers live there, both Tier 1, both reported instead of deleted). Same denylist-by-construction as reclaim.sh, plus remotion/media gates on `out`/`dist`/`build`; `self-test` asserts every refusal. The one to hand users for sudo territory. |
 | `references/targets.md` | Full target catalog: path, tier, typical size, what breaks, regeneration command. Includes the profile-preserving cache-class list for browsers/Electron. |

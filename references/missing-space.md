@@ -18,6 +18,22 @@ answered the entire question in one line: `Other Users & Shared: 190.13 GB`.
 
 Sanity-check its sum against `df` before trusting either (see units below).
 
+## "Another account shows far more free space"
+
+It can't. Every account on the Mac shares one APFS container, so real free
+space is identical from all of them (`diskutil info /` → `Container Free
+Space`). A much bigger number on one account is almost always:
+
+1. **Purgeable counted as available.** Finder and the Storage panel can add
+   space macOS *could* evict — iCloud-optimised files, local snapshots, caches
+   — and that varies per account. `df` shows only what is free now.
+2. **A "used" figure read as free.**
+3. **An old reading.**
+
+Observed: one account "remembered" ~300 GB free while `df`, `diskutil` and
+Finder all agreed on 37–50 GB. Ask for that account's Storage screenshot
+before chasing it.
+
 ## Step 1 — know your units before comparing anything
 
 | Tool | Unit |

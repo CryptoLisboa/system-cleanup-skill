@@ -9,7 +9,8 @@ set -uo pipefail
 : "${HOME:?HOME must be set}"
 MIN_MB="${MIN_MB:-1}"          # skip rows smaller than this
 ROWS="$(mktemp -t syscleanup-rows)"
-trap 'rm -f "$ROWS"' EXIT
+DOCKER_OUT="$(mktemp -t syscleanup-docker)"
+trap 'rm -f "$ROWS" "$DOCKER_OUT"' EXIT
 
 # macOS has no coreutils `timeout`. This is the replacement.
 with_timeout() {
@@ -86,6 +87,7 @@ row T0 "ffmpeg-static cache" "$HOME/Library/Caches/ffmpeg-static-nodejs"
 row T0 "gradle caches"       "$HOME/.gradle/caches"
 row T0 "go module cache"     "$HOME/go/pkg/mod"
 row T0 "cargo registry"      "$HOME/.cargo/registry"
+row T0 "maven repository"    "$HOME/.m2/repository"
 row T0 "chrome http cache"   "$HOME/Library/Caches/Google/Chrome"
 row T0 "brave http cache"    "$HOME/Library/Caches/BraveSoftware"
 row T0 "edge http cache"     "$HOME/Library/Caches/Microsoft Edge"
@@ -98,15 +100,26 @@ row T0 "adobe cache"         "$HOME/Library/Caches/Adobe"
 for u in "$HOME"/Library/Caches/*.ShipIt; do
   [ -d "$u" ] && row T0 "updater staging" "$u"
 done
+row T0 "claude versions (keep 1)" "$HOME/.local/share/claude/versions"
+
+# Per-launch code-sign clones live outside $HOME, so no home scan sees them.
+# Chrome leaves one ~2 GB clone per launch and never cleans up (85 GB by du
+# observed). They are APFS clones: du overstates, df is the real gain.
+TDIR="$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null)"
+for c in ${TDIR:+"$TDIR"../X/*.code_sign_clone}; do
+  [ -d "$c" ] || continue
+  n="$(find "$c" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')"
+  row T0 "sign clones x$n (du high)" "$c"
+done
 
 # ---------------------------------------------------------------- Tier 1
+row T1 "claude cowork VM"    "$HOME/Library/Application Support/Claude/vm_bundles"
 row T1 "playwright browsers" "$HOME/Library/Caches/ms-playwright"
 row T1 "playwright-go"       "$HOME/Library/Caches/ms-playwright-go"
 row T1 "spotify offline"     "$HOME/Library/Caches/com.spotify.client"
 row T1 "simulator DEVICES"   "$HOME/Library/Developer/CoreSimulator/Devices"
 row T1 "iOS DeviceSupport"   "$HOME/Library/Developer/Xcode/iOS DeviceSupport"
 row T1 "rust toolchains"     "$HOME/.rustup"
-row T1 "maven repository"    "$HOME/.m2/repository"
 row T1 "docker (all data)"   "$HOME/Library/Containers/com.docker.docker"
 row T1 "colima/lima VMs"     "$HOME/.lima"
 row T1 "orbstack data"       "$HOME/.orbstack"
@@ -141,8 +154,8 @@ section "Largest ~/Library/Caches entries"
 
 # ------------------------------------------------------------------ docker
 section "Docker"
-if with_timeout 20 docker system df >/tmp/syscleanup-docker.$$ 2>&1; then
-  cat /tmp/syscleanup-docker.$$
+if with_timeout 20 docker system df >"$DOCKER_OUT" 2>&1; then
+  cat "$DOCKER_OUT"
   printf '\nvolumes by name (filter these -- NEVER blanket `volume prune -a`):\n'
   with_timeout 25 docker volume ls --format '{{.Name}}' 2>/dev/null | head -20
   vc="$(with_timeout 25 docker volume ls -q 2>/dev/null | wc -l | tr -d ' ')"
@@ -152,13 +165,14 @@ else
   printf 'If Docker is installed, this is usually the stale-backend wedge:\n'
   printf '  bash %s/docker-revive.sh\n' "$(dirname "$0")"
 fi
-rm -f /tmp/syscleanup-docker.$$
+rm -f "$DOCKER_OUT"
 
 section "Next"
-cat <<'EOF'
+HERE="$(cd "$(dirname "$0")" && pwd)"
+cat <<EOF
   reclaim Tier 0 (dry-run first):
-    bash scripts/reclaim.sh all
-    bash scripts/reclaim.sh all --execute
+    bash $HERE/reclaim.sh all
+    bash $HERE/reclaim.sh all --execute
 
   Tier 1 needs an explicit per-target yes from the user, with its cost stated.
   Tier 2 is the user's to delete. Never empty the Trash for them.

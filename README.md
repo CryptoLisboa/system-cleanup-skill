@@ -43,7 +43,7 @@ bash $S/reclaim.sh all --execute         # apply (Tier 0 only, denylist-guarded)
 bash $S/reclaim.sh builds --root ~/dev   # opt-in: build output in repos (marker-gated)
 bash $S/purge-live.sh ~/dev              # dry-run: node_modules + build dirs, live receipts
 bash $S/purge-live.sh ~/dev --execute    # parallel delete with heartbeat + df-delta report
-bash $S/docker-revive.sh                 # fix Docker Desktop's full-disk wedge (restarts only)
+bash $S/docker-revive.sh                 # fix Docker Desktop's full-disk wedge (restart stops running containers; deletes nothing)
 bash $S/scan-live.sh /Users/other        # live per-entry scan (sudo-safe for other accounts)
 ```
 
@@ -65,7 +65,7 @@ Both must print `all assertions passed` before `--execute` is trusted again.
 | `scripts/reclaim.sh` | Tier-0 reclaims by group, dry-run default, denylist + self-test |
 | `scripts/purge-live.sh` | Parallel purge of dev artifacts with live receipts; the one to hand users for sudo territory |
 | `scripts/scan-live.sh` | Live per-entry size scan, parallel workers |
-| `scripts/docker-revive.sh` | Un-wedge Docker Desktop after a full disk (deletes nothing) |
+| `scripts/docker-revive.sh` | Un-wedge Docker Desktop after a full disk. Hard-restarts Docker, so running containers stop; deletes nothing |
 | `references/targets.md` | Full target catalog: path, tier, typical size, regeneration cost |
 | `references/gotchas.md` | The traps: zsh glob abort, hardlink accounting, hanging Docker CLI, locale-broken printf, and more |
 | `references/missing-space.md` | When `du` totals don't reconcile with `df`: units, permission-blind measurement, the usual suspects |

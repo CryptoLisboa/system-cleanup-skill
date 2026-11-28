@@ -24,6 +24,16 @@ knowing what's abnormal, not a promise.
 | `~/Library/Caches/hardhat-nodejs` | 32 M | re-downloads solc |
 | `~/Library/Caches/ffmpeg-static-nodejs` | 37 M | re-downloads ffmpeg |
 
+## T0 — language dependency caches (opt-in: they cost a re-download)
+
+| Path | Regenerate |
+|---|---|
+| `~/.cargo/registry`, `~/go/pkg/mod`, `~/.gradle/caches` | next build re-downloads (`reclaim.sh langcache`) |
+| `~/.m2/repository` | full Maven re-resolve on next build |
+
+Pure caches, so T0, but not in `reclaim.sh all`: clear them when space is
+tight, not by default.
+
 ## T0 — browsers (HTTP cache only)
 
 | Path | Seen |
@@ -149,12 +159,10 @@ Then `pnpm store prune` — in that order.
 | `/usr/local/Homebrew` | 0.95 G | stale x86/Rosetta brew on ARM Macs. Verify dead first: no `/usr/local/Cellar`, no `/usr/local/bin/brew`, `brew config` points at `/opt/homebrew` |
 | `/usr/local/share/dotnet` | 3.6 G | only if every SDK is end-of-life (`ls` the versions) and no .NET work exists; sudo, so user runs it |
 | `~/Library/Application Support/Claude/vm_bundles/claudevm.bundle` | 10.4 G | Claude desktop's Cowork VM image. Re-downloads (~10.8 G) the next time Cowork is opened; free win only if the user doesn't use Cowork |
-| `~/.cache/solana` | 1.3 G | Solana platform-tools; re-download on next program build |
+| `~/.cache/solana` | 1.3 G | Solana platform-tools; re-download on next program build. T1 on an account in use; `purge-live.sh --home` (dormant accounts) clears `~/.cache` as T0 |
 | `~/Library/Developer/CoreSimulator/Devices` | 192 M | installed simulator state, app data |
 | `~/Library/Developer/Xcode/iOS DeviceSupport` | — | re-extracted per device on next attach |
 | `~/.rustup` | — | toolchain re-download |
-| `~/.m2/repository` | — | full Maven re-resolve |
-| `~/.cargo/registry`, `~/go/pkg/mod`, `~/.gradle/caches` | — | dependency re-download (`langcache` group) |
 
 ## T2 — never delete
 
@@ -167,7 +175,7 @@ Then `pnpm store prune` — in that order.
 | `.vercel/project.json` | Vercel project link |
 | Rendered deliverables (`out/` in a Remotion project, exported video//images) | the actual work product |
 | `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.config`, `~/.claude` | credentials and config |
-| `~/Library/Application Support`, `Keychains`, `Mail`, `Messages`, `Mobile Documents` | app state, mail, iCloud Drive (cache-class subdirs above are the only exception) |
+| `~/Library/Application Support`, `Keychains`, `Mail`, `Messages`, `Mobile Documents` | app state, mail, iCloud Drive (the cache-class subdirs and superseded-version dirs above are the only exceptions) |
 | `~/Library/Application Support/com.apple.voicememos` | **personal audio recordings** — looks like fat app data (1.3 G seen), no cloud copy guaranteed |
 | `~/Library/Application Support/WhatsApp` | local message history |
 | `~/Library/Application Support/Dropbox` | sync state — deleting forces a full re-sync, frees nothing durable |
@@ -183,6 +191,23 @@ Docker Desktop 4.8x trims the sparse image itself after a prune.
 
 Safety order: `builder prune -a` → `image prune` (dangling) →
 `image prune -a` (re-pull cost) → volumes (**filtered by name only**).
+
+## What grows back (plan a cadence)
+
+On a busy dev Mac these refill within a week of a cleanup, so a one-off sweep
+buys days, not months:
+
+| Target | Regrowth seen |
+|---|---|
+| `~/Library/Caches/Yarn` | 0 → 11.4 G in 7 days |
+| Docker unused images + build cache | 18 G + 4 G in a month |
+| Chrome `code_sign_clone` dirs | 23 new clones in 7 days |
+| `~/.npm`, pnpm store | 2–4 G each |
+
+A weekly `reclaim.sh all --execute`, plus the two manual steps (delete clones
+with no open handles per the clone section above, Docker prune per SKILL.md),
+keeps a machine like this off the floor. `scan.sh` reports the clones; no
+script deletes them.
 
 ## Where to look when the catalog comes up short
 
